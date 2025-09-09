@@ -1,6 +1,5 @@
 import Layout from '../components/Layout';
 import { useProjectStore } from '../contexts/ProjectStoreContext';
-import { useRole } from '../contexts/RoleContext';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +8,6 @@ import { useMemo, useState } from 'react';
 
 export default function TaskEstimates() {
   const { projects, teamSetEstimate } = useProjectStore();
-  const { currentUser } = useRole();
   const [q, setQ] = useState('');
   const [team, setTeam] = useState<'all' | string>('all');
   const [status, setStatus] = useState<'all' | 'waiting' | 'in-progress' | 'done'>('all');
@@ -23,12 +21,10 @@ export default function TaskEstimates() {
       .filter(it => status === 'all' || it.task.status === status);
   }, [projects, q, team, status]);
 
-  const canEstimate = currentUser.role === 'tl' || currentUser.role === 'rkp';
-
   return (
     <Layout>
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">Оценка задач</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Оценка задач (данные из Eva, демо-редактор)</h1>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-lg border">
           <Input placeholder="Поиск по проекту/задаче..." value={q} onChange={(e)=>setQ(e.target.value)} />
           <Select value={team} onValueChange={setTeam as any}>
@@ -60,16 +56,19 @@ export default function TaskEstimates() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{task.status}</Badge>
-                  {canEstimate && (
-                    <Select defaultValue={task.size} onValueChange={(v)=> teamSetEstimate(project.id, task.id, v as any)}>
-                      <SelectTrigger className="w-28"><SelectValue placeholder="Размер" /></SelectTrigger>
-                      <SelectContent>
-                        {['S','M','L','XL','XXL','неопределен'].map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select defaultValue={task.size} onValueChange={(v)=> teamSetEstimate(project.id, task.id, v as any)}>
+                    <SelectTrigger className="w-28"><SelectValue placeholder="Размер (демо)" /></SelectTrigger>
+                    <SelectContent>
+                      {['S','M','L','XL','XXL','неопределен'].map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+              {task.evaUrl && (
+                <div className="mt-2 text-xs">
+                  <a href={task.evaUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Открыть в Eva</a>
+                </div>
+              )}
             </Card>
           ))}
           {items.length === 0 && (<div className="p-8 text-center text-gray-500">Нет задач для оценки</div>)}
@@ -78,5 +77,6 @@ export default function TaskEstimates() {
     </Layout>
   );
 }
+
 
 
