@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
+import { Textarea } from '@/components/ui/textarea';
 
 const KNOWN_TEAMS = ['1C','LKK','DV','IC','BIM','TNGL'];
 
 export default function ArchitectReviewDetail() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { findProject, architectApprove, setArchStatus, architectStartDecompose, architectAggregateAndSendToDirector, architectAddTasks } = useProjectStore();
+  const { findProject, architectApprove, setArchStatus, architectStartDecompose, architectAggregateAndSendToDirector, architectAddTasks, addComment } = useProjectStore();
   const project = findProject(projectId!);
 
   // Локальные формы для добавления подзадач
@@ -29,10 +30,22 @@ export default function ArchitectReviewDetail() {
     navigate('/architect-activity');
   };
 
+  const [declineReason, setDeclineReason] = useState('');
   const handleDecline = () => {
     if (!project) return;
-    setArchStatus(project.id, 'Отклонено', 'Отклонено архитектором (демо)');
+    const reason = declineReason.trim() || 'Отклонено архитектором';
+    setArchStatus(project.id, 'Отклонено', reason);
+    addComment(project.id, { authorRole: 'architect', author: 'Архитектор', text: `Отклонено: ${reason}` });
     navigate('/architect-activity');
+  };
+
+  const [archComment, setArchComment] = useState('');
+  const handleSendComment = () => {
+    if (!project) return;
+    const text = archComment.trim();
+    if (!text) return;
+    addComment(project.id, { authorRole: 'architect', author: 'Архитектор', text });
+    setArchComment('');
   };
 
   if (!project) {
@@ -81,9 +94,9 @@ export default function ArchitectReviewDetail() {
               </div>
             </div>
 
-            {/* Комментарии заказчика (ПРП/РП/РП проекта) */}
+            {/* Комментарии */}
             <div>
-              <div className="text-sm text-gray-600 mb-2">Комментарии заказчика</div>
+              <div className="text-sm text-gray-600 mb-2">Комментарии</div>
               <div className="space-y-2">
                 {(project.comments || []).map(c => (
                   <div key={c.id} className="p-2 border rounded text-sm">
@@ -95,6 +108,14 @@ export default function ArchitectReviewDetail() {
                   <div className="text-sm text-gray-500">Комментариев нет</div>
                 )}
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mt-2">
+                <div className="md:col-span-4">
+                  <Textarea rows={3} value={archComment} onChange={(e)=> setArchComment(e.target.value)} placeholder="Добавить комментарий от архитектора" />
+                </div>
+                <div className="md:col-span-1 flex items-start">
+                  <Button onClick={handleSendComment}>Отправить</Button>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-3 pt-2">
@@ -102,6 +123,13 @@ export default function ArchitectReviewDetail() {
               <Button onClick={handleAccept}>Запросить оценки у команд</Button>
               <Button variant="outline" onClick={()=> architectAggregateAndSendToDirector(project.id)}>Собрать и отправить директору</Button>
               <Button variant="ghost" onClick={handleDecline}>Отклонить</Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              <div className="md:col-span-4">
+                <Input value={declineReason} onChange={(e)=> setDeclineReason(e.target.value)} placeholder="Резолюция при отклонении" />
+              </div>
+              <div className="md:col-span-1" />
             </div>
 
             <div className="pt-4">

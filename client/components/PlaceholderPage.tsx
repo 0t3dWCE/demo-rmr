@@ -28,8 +28,7 @@ export default function PlaceholderPage({
               Продолжить настройку
             </Button>
             <p className="text-sm text-gray-500 mt-4">
-              Эта страница находится в разработке. 
-              Продолжите диалог с ассистентом для наполнения содержимого.
+              Эта страница находится в разработке.
             </p>
           </CardContent>
         </Card>

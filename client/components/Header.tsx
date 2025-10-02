@@ -10,7 +10,8 @@ const roleLabels: Record<UserRole, string> = {
   prp: 'Помощник руководителя бизнес-подразделения',
   rkp: 'Руководитель проекта',
   tl: 'Технический лидер команды',
-  architect: 'Архитектор'
+  architect: 'Архитектор',
+  approver: 'Согласующий'
 };
 
 const navigationConfig: Record<UserRole, Array<{ label: string; href: string; icon: any }>> = {
@@ -22,12 +23,10 @@ const navigationConfig: Record<UserRole, Array<{ label: string; href: string; ic
   ],
   rp: [
     { label: 'Проекты', href: '/', icon: Building2 },
-    { label: 'Утверждение', href: '/director', icon: Settings },
     { label: 'ТехКом', href: '/techcom', icon: Users }
   ],
   prp: [
-    { label: 'Проекты', href: '/', icon: Building2 },
-    { label: 'ТехКом', href: '/techcom', icon: Users }
+    { label: 'Проекты', href: '/', icon: Building2 }
   ],
   rkp: [
     { label: 'Проекты', href: '/', icon: Building2 },
@@ -42,6 +41,9 @@ const navigationConfig: Record<UserRole, Array<{ label: string; href: string; ic
     { label: 'Проекты', href: '/', icon: Building2 },
     { label: 'Активность архитектора', href: '/architect-activity', icon: List },
     { label: 'ТехКом', href: '/techcom', icon: Users }
+  ],
+  approver: [
+    { label: 'Проекты на согласование', href: '/approvals', icon: FileText }
   ]
 };
 
@@ -61,7 +63,7 @@ export default function Header() {
       <div className="bg-gray-50 border-b border-gray-200 px-6 py-2">
         <div className="flex items-center justify-between">
           <Select value={currentUser.role} onValueChange={handleRoleChange}>
-            <SelectTrigger className="w-64 text-sm">
+            <SelectTrigger className="min-w-[16rem] w-auto text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

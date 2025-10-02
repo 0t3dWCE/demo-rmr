@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { useProjectStore } from '../contexts/ProjectStoreContext';
 import { Textarea } from '@/components/ui/textarea';
 import { useRole } from '../contexts/RoleContext';
 
-type ProjectStatus = 'evaluation' | 'in-progress' | 'done' | 'backlog' | 'draft';
+type ProjectStatus = 'evaluation' | 'on-approval' | 'in-progress' | 'done' | 'backlog' | 'draft' | 'rejected';
 type TaskStatus = 'in-progress' | 'waiting' | 'done' | 'cancelled';
 type Size = 'S' | 'M' | 'L' | 'XL' | 'XXL' | 'неопределен';
 type ArchStatus = 'Новая' | 'На рассмотрении' | 'На уточнении' | 'Требует уточнений' | 'Принято' | 'Отклонено' | '-';
@@ -46,14 +46,16 @@ const tasks: TaskItem[] = [];
 const statusBadges: Record<ProjectStatus, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-500' },
   evaluation: { label: 'Оценка', color: 'bg-blue-500' },
+  'on-approval': { label: 'Согласование', color: 'bg-purple-500' },
   'in-progress': { label: 'Выполняется', color: 'bg-green-600' },
   done: { label: 'Завершён', color: 'bg-gray-600' },
-  backlog: { label: 'Бэклог', color: 'bg-indigo-500' }
+  backlog: { label: 'Бэклог', color: 'bg-indigo-500' },
+  rejected: { label: 'Отклонён', color: 'bg-red-500' }
 };
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const { findProject, addComment, submitToRp, rpSendToArchitect, directorApprove, directorReject } = useProjectStore();
+  const { findProject, addComment, submitToRp, rpSendToArchitect, rpMarkApproval, directorApprove, directorReject, updateProject } = useProjectStore();
   const { currentUser } = useRole();
   const storeProject = findProject(id!);
 
@@ -63,6 +65,50 @@ export default function ProjectDetail() {
   const [archFilter, setArchFilter] = useState<'all' | ArchStatus>('all');
   const [search, setSearch] = useState('');
   const [newComment, setNewComment] = useState('');
+  const [editName, setEditName] = useState(storeProject?.name || '');
+  const [editStart, setEditStart] = useState(storeProject?.startDate || '');
+  const [editEnd, setEditEnd] = useState(storeProject?.endDate || '');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setEditName(storeProject?.name || '');
+    setEditStart(storeProject?.startDate || '');
+    setEditEnd(storeProject?.endDate || '');
+  }, [storeProject?.id]);
+
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  const saveName = () => {
+    if (!storeProject) return;
+    const newName = editName.trim();
+    if (newName && newName !== storeProject.name) {
+      updateProject(storeProject.id, { name: newName });
+    }
+    setIsEditingName(false);
+  };
+
+  const onNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveName();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setEditName(storeProject?.name || '');
+      setIsEditingName(false);
+    }
+  };
+
+  const saveDates = () => {
+    if (!storeProject) return;
+    updateProject(storeProject.id, { startDate: editStart, endDate: editEnd });
+  };
 
   const filtered = useMemo(() => {
     const source = (storeProject?.tasks as unknown as TaskItem[]) || [];
@@ -102,10 +148,31 @@ export default function ProjectDetail() {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center space-x-3 mb-2">
-                <h1 className="text-2xl font-bold text-gray-900">{storeProject?.name}</h1>
+                {currentUser.role === 'rp' ? (
+                  isEditingName ? (
+                    <Input
+                      ref={nameInputRef}
+                      value={editName}
+                      onChange={(e)=> setEditName(e.target.value)}
+                      onBlur={saveName}
+                      onKeyDown={onNameKeyDown}
+                      className="text-2xl font-bold h-10"
+                    />
+                  ) : (
+                    <h1
+                      className="text-2xl font-bold text-gray-900 cursor-text hover:bg-gray-50 px-1 rounded"
+                      onClick={() => setIsEditingName(true)}
+                      title="Кликните, чтобы редактировать"
+                    >
+                      {storeProject?.name}
+                    </h1>
+                  )
+                ) : (
+                  <h1 className="text-2xl font-bold text-gray-900">{storeProject?.name}</h1>
+                )}
                 {storeProject && (
-                  <Badge className={`bg-blue-500 text-white`}>
-                    {storeProject.status === 'evaluation' ? 'Оценка' : storeProject.status}
+                  <Badge className={`${statusBadges[storeProject.status].color} text-white`}>
+                    {statusBadges[storeProject.status].label}
                   </Badge>
                 )}
                 {storeProject?.archStatus && (
@@ -117,22 +184,35 @@ export default function ProjectDetail() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Прогресс</div>
-                  <div className="flex items-center space-x-2">
-                    <Progress value={storeProject ? 50 : 0} className="h-2 w-40" />
-                    <span className="text-sm font-medium">{storeProject ? '50%' : '0%'}</span>
-                  </div>
+                  {storeProject && storeProject.tasks.length > 0 ? (
+                    <div className="flex items-center space-x-2">
+                      <Progress value={Math.round((storeProject.tasks.filter(t=>t.status==='done').length / storeProject.tasks.length) * 100)} className="h-2 w-40" />
+                      <span className="text-sm font-medium">{Math.round((storeProject.tasks.filter(t=>t.status==='done').length / storeProject.tasks.length) * 100)}%</span>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">—</div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Сроки</div>
-                  <div className="flex items-center text-sm text-gray-800">
-                    <CalendarDays className="w-4 h-4 mr-2 text-gray-500" />
-                    {storeProject?.startDate} — {storeProject?.endDate}
-                  </div>
+                  {currentUser.role === 'rp' ? (
+                    <div className="flex items-center text-sm text-gray-800 gap-2">
+                      <CalendarDays className="w-4 h-4 mr-2 text-gray-500" />
+                      <Input type="date" value={editStart} onChange={(e)=> setEditStart(e.target.value)} onBlur={saveDates} onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveDates(); } }} className="h-8 w-40" />
+                      <span className="text-gray-500">—</span>
+                      <Input type="date" value={editEnd} onChange={(e)=> setEditEnd(e.target.value)} onBlur={saveDates} onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveDates(); } }} className="h-8 w-40" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-sm text-gray-800">
+                      <CalendarDays className="w-4 h-4 mr-2 text-gray-500" />
+                      {storeProject?.startDate || '—'} — {storeProject?.endDate || '—'}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Команды</div>
                   <div className="flex flex-wrap gap-1">
-                    {(storeProject?.teams || []).map(t => (
+                    {Array.from(new Set(((storeProject?.tasks || []).map(t => t.team)).filter(Boolean))).map(t => (
                       <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
                     ))}
                   </div>
@@ -141,19 +221,28 @@ export default function ProjectDetail() {
             </div>
             <div className="ml-6">
               <div className="flex items-center gap-2">
-                <Button variant="outline" className="flex items-center space-x-2">
-                  <Users className="w-4 h-4" />
-                  <span>Участники</span>
-                </Button>
-                {storeProject && currentUser.role === 'prp' && storeProject.flowStatus === 'draft-created' && (
-                  <Button size="sm" variant="outline" onClick={()=> submitToRp(storeProject.id)}>Отправить на согласование РП</Button>
-                )}
-                {storeProject && currentUser.role === 'rp' && storeProject.flowStatus === 'waiting-rp-approval' && (
+                {storeProject && currentUser.role === 'rkp' && (
                   <Button size="sm" onClick={()=> rpSendToArchitect(storeProject.id)}>Отправить на архитектурный анализ</Button>
+                )}
+                {storeProject && currentUser.role === 'rp' && (
+                  storeProject.flowStatus === 'waiting-architect-review' ? (
+                    <Badge variant="outline" className="text-blue-700 border-blue-300">На архитектурном анализе</Badge>
+                  ) : (storeProject.flowStatus === 'waiting-rp-approval' || storeProject.flowStatus === 'draft-created') ? (
+                    <Button size="sm" onClick={()=> rpSendToArchitect(storeProject.id)}>Отправить на архитектурный анализ</Button>
+                  ) : storeProject.flowStatus === 'waiting-director-approve' ? (
+                    storeProject.status === 'on-approval'
+                      ? <Badge variant="outline" className="text-purple-700 border-purple-300">На утверждении</Badge>
+                      : <Badge variant="outline" className="text-gray-700 border-gray-300">Оценка завершена</Badge>
+                  ) : null
                 )}
                 {storeProject && (currentUser.role === 'director' || currentUser.role === 'rp') && storeProject.flowStatus === 'waiting-director-approve' && (
                   <>
-                    <Button size="sm" onClick={()=> directorApprove(storeProject.id)}>Утвердить</Button>
+                    {currentUser.role === 'rp' && storeProject.status !== 'on-approval' && (
+                      <Button size="sm" onClick={()=> rpMarkApproval(storeProject.id)}>На утверждение</Button>
+                    )}
+                    {currentUser.role === 'director' && (
+                      <Button size="sm" onClick={()=> directorApprove(storeProject.id)}>Утвердить</Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={()=> directorReject(storeProject.id)}>Отклонить</Button>
                   </>
                 )}
@@ -161,6 +250,8 @@ export default function ProjectDetail() {
             </div>
           </div>
         </div>
+
+        {/* Инлайн-редактирование внедрено в шапку; отдельный блок удалён */}
 
         {/* Comments block */}
         <Card>
@@ -182,8 +273,13 @@ export default function ProjectDetail() {
             <div className="grid grid-cols-1 gap-2">
               <Textarea value={newComment} onChange={(e)=>setNewComment(e.target.value)} rows={3} placeholder="Добавить комментарий" />
               <div>
-                <Button size="sm" onClick={()=>{ if(!storeProject || !newComment.trim()) return; addComment(storeProject.id, { authorRole: 'rp', author: 'Руководитель БП', text: newComment.trim() }); setNewComment(''); }}>Отправить от РП</Button>
-                <Button size="sm" variant="outline" className="ml-2" onClick={()=>{ if(!storeProject || !newComment.trim()) return; addComment(storeProject.id, { authorRole: 'prp', author: 'Помощник РП', text: newComment.trim() }); setNewComment(''); }}>Отправить от ПРП</Button>
+                <Button size="sm" onClick={()=>{
+                  if (!storeProject) return;
+                  const text = newComment.trim();
+                  if (!text) return;
+                  addComment(storeProject.id, { authorRole: currentUser.role as any, author: currentUser.name, text });
+                  setNewComment('');
+                }}>Отправить</Button>
               </div>
             </div>
           </CardContent>

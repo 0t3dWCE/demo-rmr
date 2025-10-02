@@ -20,8 +20,10 @@ import TechComDetail from "./pages/TechComDetail";
 import ArchitectActivity from "./pages/ArchitectActivity";
 import ArchitectReviewDetail from "./pages/ArchitectReviewDetail";
 import PlaceholderPage from "./components/PlaceholderPage";
+import Approvals from "./pages/Approvals";
 import TaskEstimates from "./pages/TaskEstimates";
 import DirectorApprove from "./pages/DirectorApprove";
+
 
 // Icons for placeholder pages
 import { 
@@ -54,6 +56,7 @@ const App = () => (
               <Route path="/architect-activity/:projectId" element={<ArchitectReviewDetail />} />
               <Route path="/estimates" element={<TaskEstimates />} />
               <Route path="/director" element={<DirectorApprove />} />
+              <Route path="/approvals" element={<Approvals />} />
               <Route 
                 path="/settings" 
                 element={

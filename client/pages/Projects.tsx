@@ -6,18 +6,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
-import { Search, Plus, Clock, CheckCircle, AlertTriangle, Download } from 'lucide-react';
+import { Search, Plus, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useProjectStore } from '../contexts/ProjectStoreContext';
 import { useRole } from '../contexts/RoleContext';
 
-type ProjectStatus = 'draft' | 'evaluation' | 'in-progress' | 'done' | 'backlog';
+type ProjectStatus = 'draft' | 'evaluation' | 'on-approval' | 'in-progress' | 'done' | 'backlog' | 'rejected';
 
-const statusLabel: Record<ProjectStatus, string> = {
+const baseStatusLabel: Record<ProjectStatus, string> = {
   draft: 'Черновик',
   evaluation: 'Оценка',
+  'on-approval': 'Согласование',
   'in-progress': 'Выполняется',
   done: 'Завершён',
-  backlog: 'Бэклог'
+  backlog: 'Бэклог',
+  rejected: 'Отклонён'
 };
 
 export default function Projects() {
@@ -27,12 +29,17 @@ export default function Projects() {
   const [status, setStatus] = useState<'all' | ProjectStatus>('all');
   const [team, setTeam] = useState<'all' | string>('all');
 
-  const allTeams = useMemo(() => Array.from(new Set(projects.flatMap(p => p.teams))), [projects]);
+  const getProjectTeams = (p: any): string[] => Array.from(new Set(((p.tasks || []).map((t: any) => t.team)).filter(Boolean)));
+  const allTeams = useMemo(() => Array.from(new Set(projects.flatMap(p => getProjectTeams(p)))), [projects]);
 
-  const filtered = projects.filter(p => {
+  const source = currentUser.role === 'prp'
+    ? projects.filter(p => (p as any).createdBy?.email === currentUser.email)
+    : projects;
+
+  const filtered = source.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = status === 'all' || p.status === status;
-    const matchesTeam = team === 'all' || p.teams.includes(team);
+    const matchesStatus = status === 'all' || (status === 'rejected' ? p.flowStatus === 'rejected' : p.status === status);
+    const matchesTeam = team === 'all' || getProjectTeams(p).includes(team);
     return matchesSearch && matchesStatus && matchesTeam;
   });
 
@@ -83,14 +90,13 @@ export default function Projects() {
               <SelectItem value="all">Все статусы</SelectItem>
               <SelectItem value="draft">Черновик</SelectItem>
               <SelectItem value="evaluation">Оценка</SelectItem>
+              <SelectItem value="on-approval">Согласование</SelectItem>
               <SelectItem value="in-progress">Выполняется</SelectItem>
               <SelectItem value="done">Завершён</SelectItem>
-              <SelectItem value="backlog">Бэклог</SelectItem>
+              <SelectItem value="rejected">Отклонен</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" /> Экспорт
-          </Button>
+          {/* Кнопка Экспорт удалена для всех ролей */}
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -99,7 +105,9 @@ export default function Projects() {
             <div className="col-span-3">Команды</div>
             <div className="col-span-2">Статус</div>
             <div className="col-span-2">Срок</div>
-            <div className="col-span-1 text-right">Индикаторы</div>
+            {currentUser.role !== 'prp' && (
+              <div className="col-span-1 text-right">Индикаторы</div>
+            )}
           </div>
           <div>
             {filtered.map(p => (
@@ -111,29 +119,41 @@ export default function Projects() {
                       <span className="text-xs text-gray-500">({p.id})</span>
                     </div>
                     <div className="col-span-3 space-x-1">
-                      {p.teams.map(t => (
+                      {getProjectTeams(p).map(t => (
                         <Badge key={t} variant="outline" className="mr-1 text-[10px]">{t}</Badge>
                       ))}
                     </div>
                     <div className="col-span-2">
-                      <Badge variant="outline">{statusLabel[p.status]}</Badge>
+                      <Badge variant="outline">{
+                        p.status === 'rejected'
+                          ? baseStatusLabel['rejected']
+                          : (currentUser.role === 'rp' && (p.flowStatus === 'waiting-director-approve' || ((p.tasks||[]).length>0 && (p.tasks||[]).every(t=>t.status==='done'))))
+                            ? (p.status === 'on-approval' ? 'На утверждении' : 'Оценка завершена')
+                            : baseStatusLabel[p.status]
+                      }</Badge>
                     </div>
                     <div className="col-span-2 text-sm text-gray-700">{p.endDate}</div>
-                    <div className="col-span-1 flex justify-end">
-                      {p.status === 'evaluation' && p.archStatus && <AlertTriangle className="w-4 h-4 text-yellow-500" />}
-                    </div>
+                    {currentUser.role !== 'prp' && (
+                      <div className="col-span-1 flex justify-end">
+                        {p.status === 'evaluation' && p.archStatus && <AlertTriangle className="w-4 h-4 text-yellow-500" />}
+                      </div>
+                    )}
                   </div>
                   {p.status === 'evaluation' && (
                     <div className="px-4 pb-3">
                       <div className="flex items-center gap-2 text-xs text-gray-600">Статус архитектурной оценки: {p.archStatus || '-'}</div>
-                      <div className="mt-2 flex gap-2">
-                        {currentUser.role === 'prp' && p.flowStatus === 'draft-created' && (
+                      {currentUser.role !== 'prp' && (
+                        <div className="mt-2 flex gap-2">
+                          {currentUser.role === 'rp' && p.flowStatus === 'waiting-rp-approval' && (
+                            <Button size="sm" onClick={(e)=>{e.preventDefault(); rpSendToArchitect(p.id);}}>Отправить на архитектурный анализ</Button>
+                          )}
+                        </div>
+                      )}
+                      {currentUser.role === 'prp' && p.flowStatus === 'draft-created' && (
+                        <div className="mt-2 flex gap-2">
                           <Button size="sm" variant="outline" onClick={(e)=>{e.preventDefault(); submitToRp(p.id);}}>Отправить на согласование РП</Button>
-                        )}
-                        {currentUser.role === 'rp' && p.flowStatus === 'waiting-rp-approval' && (
-                          <Button size="sm" onClick={(e)=>{e.preventDefault(); rpSendToArchitect(p.id);}}>Отправить на архитектурный анализ</Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>

@@ -7,10 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../contexts/ProjectStoreContext';
+import { useRole } from '../contexts/RoleContext';
 
 export default function CreateProject() {
   const navigate = useNavigate();
   const { createProject } = useProjectStore();
+  const { currentUser } = useRole();
   const [name, setName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -20,7 +22,13 @@ export default function CreateProject() {
   const [requiresArch, setRequiresArch] = useState(true);
   const [comment, setComment] = useState('');
 
-  const canSubmit = name.length >= 5 && name.length <= 200 && startDate && endDate && comment.length >= 50 && department && systems.length > 0;
+  const isAssistant = currentUser.role === 'prp';
+  const isRp = currentUser.role === 'rp';
+  const canSubmit = isAssistant
+    ? (name.length >= 5 && name.length <= 200 && comment.length >= 50)
+    : isRp
+    ? (name.length >= 5 && name.length <= 200 && startDate && endDate && comment.length >= 50)
+    : (name.length >= 5 && name.length <= 200 && startDate && endDate && comment.length >= 50 && department && systems.length > 0);
 
   const priorityHint = useMemo(() => {
     if (priority === '1' || priority === '2') return 'Высокий приоритет — архитектурная оценка включена по умолчанию';
@@ -31,13 +39,14 @@ export default function CreateProject() {
     if (!canSubmit) return;
     const proj = createProject({
       name,
-      startDate,
-      endDate,
-      priority: Number(priority),
-      department,
-      systems,
-      requiresArch,
-      comment
+      startDate: isAssistant ? '' : startDate,
+      endDate: isAssistant ? '' : endDate,
+      priority: isAssistant ? 3 : (isRp ? 3 : Number(priority)),
+      department: isAssistant ? '' : (isRp ? '' : department),
+      systems: isAssistant ? [] : (isRp ? [] : systems),
+      requiresArch: isAssistant ? false : (isRp ? false : requiresArch),
+      comment,
+      createdBy: { role: currentUser.role, email: currentUser.email, name: currentUser.name }
     });
     navigate(`/projects/${proj.id}`);
   };
@@ -60,66 +69,74 @@ export default function CreateProject() {
               <label className="block text-sm text-gray-600 mb-1">Название проекта</label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Минимум 5 символов" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Дата начала</label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            {!isAssistant && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Дата начала</label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Дата окончания</label>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+                {(!isRp) && (
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Приоритет</label>
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1</SelectItem>
+                        <SelectItem value="2">2</SelectItem>
+                        <SelectItem value="3">3</SelectItem>
+                        <SelectItem value="4">4</SelectItem>
+                        <SelectItem value="5">5</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="text-xs text-gray-500 mt-1">{priorityHint}</div>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Дата окончания</label>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Приоритет</label>
-                <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="3">3</SelectItem>
-                    <SelectItem value="4">4</SelectItem>
-                    <SelectItem value="5">5</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-gray-500 mt-1">{priorityHint}</div>
-              </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Департамент-исполнитель</label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите департамент" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1C">1C</SelectItem>
-                    <SelectItem value="LKK">LKK</SelectItem>
-                    <SelectItem value="DV">DV</SelectItem>
-                    <SelectItem value="IC">IC</SelectItem>
-                    <SelectItem value="BIM">BIM</SelectItem>
-                    <SelectItem value="TNGL">TNGL</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Системы взаимодействия</label>
-                <div className="flex flex-wrap gap-2">
-                  {['1C','LKK','DV','IC','BIM','TNGL'].map(s => (
-                    <Button key={s} type="button" variant={systems.includes(s) ? 'default' : 'outline'} size="sm" onClick={() => toggleSystem(s)}>
-                      {s}
-                    </Button>
-                  ))}
+            {(!isAssistant && !isRp) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Департамент-исполнитель</label>
+                  <Select value={department} onValueChange={setDepartment}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Выберите департамент" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1C">1C</SelectItem>
+                      <SelectItem value="LKK">LKK</SelectItem>
+                      <SelectItem value="DV">DV</SelectItem>
+                      <SelectItem value="IC">IC</SelectItem>
+                      <SelectItem value="BIM">BIM</SelectItem>
+                      <SelectItem value="TNGL">TNGL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Системы взаимодействия</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['1C','LKK','DV','IC','BIM','TNGL'].map(s => (
+                      <Button key={s} type="button" variant={systems.includes(s) ? 'default' : 'outline'} size="sm" onClick={() => toggleSystem(s)}>
+                        {s}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex items-center space-x-2">
-              <input id="requiresArch" type="checkbox" checked={requiresArch} onChange={(e) => setRequiresArch(e.target.checked)} />
-              <label htmlFor="requiresArch" className="text-sm text-gray-700">Требует архитектурной оценки (по умолчанию для приоритетов 1-2)</label>
-            </div>
+            {(!isAssistant && !isRp) && (
+              <div className="flex items-center space-x-2">
+                <input id="requiresArch" type="checkbox" checked={requiresArch} onChange={(e) => setRequiresArch(e.target.checked)} />
+                <label htmlFor="requiresArch" className="text-sm text-gray-700">Требует архитектурной оценки (по умолчанию для приоритетов 1-2)</label>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm text-gray-600 mb-1">Комментарий (описание, минимум 50 символов)</label>

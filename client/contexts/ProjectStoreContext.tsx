@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import type { UserRole, User } from './RoleContext';
 
-export type ProjectStatus = 'draft' | 'evaluation' | 'in-progress' | 'done' | 'backlog';
+export type ProjectStatus = 'draft' | 'evaluation' | 'on-approval' | 'in-progress' | 'done' | 'backlog';
 export type ArchStatus = 'Новая' | 'На рассмотрении' | 'На уточнении' | 'Требует уточнений' | 'Принято' | 'Отклонено' | null;
 export type TaskStatus = 'in-progress' | 'waiting' | 'done' | 'cancelled';
 export type TaskSize = 'S' | 'M' | 'L' | 'XL' | 'XXL' | 'неопределен';
@@ -53,6 +54,7 @@ export interface ProjectItem {
   tasks: ProjectTask[];
   flowStatus: FlowStatus; // бизнес-флоу
   comments: ProjectComment[];
+  createdBy?: Pick<User, 'role' | 'email' | 'name'>;
 }
 
 interface CreateProjectInput {
@@ -64,11 +66,13 @@ interface CreateProjectInput {
   systems: string[];
   requiresArch: boolean;
   comment: string;
+  createdBy?: Pick<User, 'role' | 'email' | 'name'>;
 }
 
 interface ProjectStore {
   projects: ProjectItem[];
   createProject: (input: CreateProjectInput) => ProjectItem;
+  updateProject: (projectId: string, fields: Partial<Pick<ProjectItem, 'name' | 'startDate' | 'endDate'>>) => void;
   setArchStatus: (projectId: string, status: Exclude<ArchStatus, null>, reason?: string) => void;
   architectApprove: (projectId: string, teams: string[]) => void;
   architectAddTasks: (projectId: string, items: Array<{ team: string; name: string; dueDate: string }>) => void;
@@ -76,6 +80,7 @@ interface ProjectStore {
   // переходы флоу
   submitToRp: (projectId: string) => void;
   rpSendToArchitect: (projectId: string) => void;
+  rpMarkApproval: (projectId: string) => void;
   architectStartDecompose: (projectId: string) => void;
   architectRequestEstimates: (projectId: string, teams: string[]) => void;
   teamSetEstimate: (projectId: string, taskId: string, size: TaskSize) => void;
@@ -138,26 +143,31 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
     const project: ProjectItem = {
       id,
       name: input.name,
-      status: 'evaluation',
+      status: 'draft',
       startDate: input.startDate,
       endDate: input.endDate,
       priority: (input.priority as 1|2|3|4|5) || 3,
       department: input.department,
       systems: input.systems,
       requiresArch: input.requiresArch,
-      archStatus: input.requiresArch ? 'Новая' : null,
+      archStatus: null,
       teams: [],
       flowStatus: 'draft-created',
       tasks: [],
       comments: input.comment ? [
         { id: `pc-${Date.now()}`, authorRole: 'prp', author: 'Помощник РП', text: input.comment, date: new Date().toISOString().slice(0,10) }
-      ] : []
+      ] : [],
+      createdBy: input.createdBy
     };
     setProjects(prev => [project, ...prev]);
     return project;
   };
 
   const findProject = (projectId: string) => projects.find(p => p.id === projectId);
+
+  const updateProject = (projectId: string, fields: Partial<Pick<ProjectItem, 'name' | 'startDate' | 'endDate'>>) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...fields } : p));
+  };
 
   const setArchStatus = (projectId: string, status: Exclude<ArchStatus, null>, reason?: string) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, archStatus: status, archRejectionReason: status === 'Отклонено' ? (reason || '') : undefined } : p));
@@ -203,6 +213,7 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
   // Переходы флоу
   const submitToRp = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'waiting-rp-approval' } : p));
   const rpSendToArchitect = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'waiting-architect-review', status: 'evaluation' } : p));
+  const rpMarkApproval = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'waiting-director-approve', status: 'on-approval' } : p));
   const architectStartDecompose = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'architect-decomposing' } : p));
   const architectRequestEstimates = (projectId: string, teams: string[]) => {
     setProjects(prev => prev.map(p => {
@@ -232,7 +243,7 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
   };
   const architectAggregateAndSendToDirector = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'waiting-director-approve' } : p));
   const directorApprove = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'approved', status: 'in-progress' } : p));
-  const directorReject = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'rejected' } : p));
+  const directorReject = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'rejected', status: 'rejected' } : p));
 
   const addComment = (projectId: string, c: Omit<ProjectComment, 'id' | 'date'>) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, comments: [...(p.comments || []), { ...c, id: `pc-${Date.now()}`, date: new Date().toISOString().slice(0,10) }] } : p));
@@ -241,12 +252,14 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
   const value: ProjectStore = useMemo(() => ({
     projects,
     createProject,
+    updateProject,
     setArchStatus,
     architectApprove,
     architectAddTasks,
     findProject,
     submitToRp,
     rpSendToArchitect,
+    rpMarkApproval,
     architectStartDecompose,
     architectRequestEstimates,
     teamSetEstimate,

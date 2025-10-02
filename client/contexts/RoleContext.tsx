@@ -6,7 +6,8 @@ export type UserRole =
   | 'prp'             // Помощник руководителя подразделения (ПРП)
   | 'rkp'             // Руководитель команды проекта (РКП)
   | 'tl'              // Тех/Тим Лид (ТЛ)
-  | 'architect';      // Архитектор (А)
+  | 'architect'       // Архитектор (А)
+  | 'approver';       // Согласующий
 
 export interface User {
   name: string;
@@ -58,6 +59,12 @@ const defaultUsers: Record<UserRole, User> = {
     role: 'architect',
     email: 'architect@company.ru',
     company: 'Архитектура'
+  },
+  approver: {
+    name: 'Согласующий',
+    role: 'approver',
+    email: 'approver@company.ru',
+    company: 'Компания'
   }
 };
 
