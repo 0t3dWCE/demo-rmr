@@ -127,9 +127,11 @@ export default function Projects() {
                       <Badge variant="outline">{
                         p.status === 'rejected'
                           ? baseStatusLabel['rejected']
-                          : (currentUser.role === 'rp' && (p.flowStatus === 'waiting-director-approve' || ((p.tasks||[]).length>0 && (p.tasks||[]).every(t=>t.status==='done'))))
-                            ? (p.status === 'on-approval' ? 'На утверждении' : 'Оценка завершена')
-                            : baseStatusLabel[p.status]
+                          : ((currentUser.role === 'director' || currentUser.role === 'approver') && p.status === 'on-approval')
+                            ? 'Требует согласования'
+                            : (currentUser.role === 'rp' && (p.flowStatus === 'waiting-director-approve' || ((p.tasks||[]).length>0 && (p.tasks||[]).every(t=>t.status==='done'))))
+                              ? (p.status === 'on-approval' ? 'На утверждении' : 'Оценка завершена')
+                              : baseStatusLabel[p.status]
                       }</Badge>
                     </div>
                     <div className="col-span-2 text-sm text-gray-700">{p.endDate}</div>

@@ -7,7 +7,8 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { CalendarDays, ExternalLink, AlertTriangle, Users } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { CalendarDays, ExternalLink, AlertTriangle, Users, Play } from 'lucide-react';
 import { useProjectStore } from '../contexts/ProjectStoreContext';
 import { Textarea } from '@/components/ui/textarea';
 import { useRole } from '../contexts/RoleContext';
@@ -43,6 +44,15 @@ interface TaskItem {
 const mockProject: ProjectInfo | null = null;
 const tasks: TaskItem[] = [];
 
+// Список возможных руководителей проектов (в реальности будет из API)
+const availableProjectManagers = [
+  'Иванов Иван Иванович',
+  'Петров Петр Петрович',
+  'Сидоров Сидор Сидорович',
+  'Козлова Мария Александровна',
+  'Смирнов Алексей Викторович'
+];
+
 const statusBadges: Record<ProjectStatus, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-500' },
   evaluation: { label: 'Оценка', color: 'bg-blue-500' },
@@ -55,7 +65,7 @@ const statusBadges: Record<ProjectStatus, { label: string; color: string }> = {
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const { findProject, addComment, submitToRp, rpSendToArchitect, rpMarkApproval, directorApprove, directorReject, updateProject } = useProjectStore();
+  const { findProject, addComment, submitToRp, rpSendToArchitect, rpMarkApproval, directorApprove, directorReject, approverApprove, approverReject, updateProject, toggleAutoStart, startProject, setProjectManager } = useProjectStore();
   const { currentUser } = useRole();
   const storeProject = findProject(id!);
 
@@ -218,6 +228,38 @@ export default function ProjectDetail() {
                   </div>
                 </div>
               </div>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(currentUser.role === 'rp' || currentUser.role === 'director') && storeProject && (
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Руководитель проекта</div>
+                    <Select 
+                      value={storeProject.projectManager || ''} 
+                      onValueChange={(value) => setProjectManager(storeProject.id, value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Выберите руководителя проекта" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableProjectManagers.map(manager => (
+                          <SelectItem key={manager} value={manager}>{manager}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {currentUser.role === 'rp' && storeProject && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="auto-start" 
+                      checked={storeProject.autoStartOnApproval} 
+                      onCheckedChange={() => toggleAutoStart(storeProject.id)}
+                    />
+                    <label htmlFor="auto-start" className="text-sm text-gray-700 cursor-pointer">
+                      Автоматически стартовать при согласовании
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="ml-6">
               <div className="flex items-center gap-2">
@@ -238,13 +280,33 @@ export default function ProjectDetail() {
                 {storeProject && (currentUser.role === 'director' || currentUser.role === 'rp') && storeProject.flowStatus === 'waiting-director-approve' && (
                   <>
                     {currentUser.role === 'rp' && storeProject.status !== 'on-approval' && (
-                      <Button size="sm" onClick={()=> rpMarkApproval(storeProject.id)}>На утверждение</Button>
+                      <Button size="sm" onClick={()=> rpMarkApproval(storeProject.id)}>На согласование</Button>
                     )}
-                    {currentUser.role === 'director' && (
-                      <Button size="sm" onClick={()=> directorApprove(storeProject.id)}>Утвердить</Button>
+                    {currentUser.role === 'director' && storeProject.status === 'on-approval' && (
+                      <>
+                        <Button size="sm" onClick={()=> directorApprove(storeProject.id)}>Утвердить</Button>
+                        <Button size="sm" variant="outline" onClick={()=> directorReject(storeProject.id)}>Отклонить</Button>
+                      </>
                     )}
-                    <Button size="sm" variant="outline" onClick={()=> directorReject(storeProject.id)}>Отклонить</Button>
                   </>
+                )}
+                {storeProject && currentUser.role === 'approver' && storeProject.status === 'on-approval' && storeProject.flowStatus === 'waiting-director-approve' && (
+                  <>
+                    <Button size="sm" onClick={()=> approverApprove(storeProject.id)}>Утвердить</Button>
+                    <Button size="sm" variant="outline" onClick={()=> approverReject(storeProject.id)}>Отклонить</Button>
+                  </>
+                )}
+                {storeProject && (currentUser.role === 'rp' || currentUser.role === 'director') && storeProject.flowStatus === 'approved' && storeProject.status !== 'in-progress' && (
+                  <Button 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700" 
+                    onClick={()=> startProject(storeProject.id)}
+                    disabled={!storeProject.projectManager}
+                    title={!storeProject.projectManager ? 'Необходимо назначить руководителя проекта' : ''}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Старт проекта
+                  </Button>
                 )}
               </div>
             </div>
@@ -358,6 +420,7 @@ export default function ProjectDetail() {
                           <th className="text-left px-4 py-2 w-32">Статус</th>
                           <th className="text-left px-4 py-2 w-40">Решение архитектора</th>
                           <th className="text-left px-4 py-2 w-40">Срок</th>
+                          <th className="text-center px-4 py-2 w-20">Светофор</th>
                           <th className="text-right px-4 py-2 w-32">Действия</th>
                         </tr>
                       </thead>
@@ -386,6 +449,69 @@ export default function ProjectDetail() {
                               <div className="flex items-center text-gray-800">
                                 <CalendarDays className="w-4 h-4 mr-2 text-gray-500" /> {t.dueDate}
                               </div>
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {(() => {
+                                // ЛОГИКА СВЕТОФОРА для Epic команды в Eva
+                                // В реальности эти данные приходят с бэкенда:
+                                // - Подсчет всех подзадач epic в Eva
+                                // - Учет очереди задач команды (задачи по другим проектам)
+                                // - Расчет финальной даты завершения с учетом очереди
+                                // - Сравнение с deadline проекта
+                                
+                                const teamTasks = items;
+                                const allEstimated = teamTasks.every(task => task.size !== 'неопределен');
+                                
+                                // Серый: оценки в Eva еще нет
+                                if (!allEstimated) {
+                                  return <div className="w-4 h-4 rounded-full bg-gray-300 mx-auto" title="Оценки в Eva еще нет" />;
+                                }
+                                
+                                // Зелёный: все задачи выполнены
+                                const allDone = teamTasks.every(task => task.status === 'done');
+                                if (allDone) {
+                                  return <div className="w-4 h-4 rounded-full bg-green-500 mx-auto" title="Все задачи выполнены" />;
+                                }
+                                
+                                // В реальности здесь будет расчет от бэкенда:
+                                // const estimatedCompletion = calculateWithQueue(team, project);
+                                // const isOverdue = estimatedCompletion > project.endDate;
+                                // const progressPercent = calculateProgress(teamTasks);
+                                // const timeToDeadlinePercent = calculateTimePercent(now, endDate);
+                                
+                                // Для демо: упрощенная логика
+                                const completedCount = teamTasks.filter(task => task.status === 'done').length;
+                                const totalCount = teamTasks.length;
+                                const progressPercent = (completedCount / totalCount) * 100;
+                                
+                                // Красный: если прогресс < 30% и осталось мало времени (риск не успеть)
+                                // В реальности: если estimatedCompletion > deadline
+                                if (progressPercent < 30 && storeProject) {
+                                  const now = new Date();
+                                  const deadline = new Date(storeProject.endDate);
+                                  const daysLeft = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                  if (daysLeft < 30) {
+                                    return <div className="w-4 h-4 rounded-full bg-red-500 mx-auto" title="Риск срыва срока: с учетом очереди команда может не успеть" />;
+                                  }
+                                }
+                                
+                                // Жёлтый: осталось > половины задач, но время перевалило за половину до дедлайна
+                                if (progressPercent < 50 && storeProject) {
+                                  const now = new Date();
+                                  const start = new Date(storeProject.startDate);
+                                  const deadline = new Date(storeProject.endDate);
+                                  const totalTime = deadline.getTime() - start.getTime();
+                                  const elapsedTime = now.getTime() - start.getTime();
+                                  const timeProgressPercent = (elapsedTime / totalTime) * 100;
+                                  
+                                  if (timeProgressPercent > 50) {
+                                    return <div className="w-4 h-4 rounded-full bg-yellow-500 mx-auto" title="Внимание: выполнено меньше половины, а время прошло больше половины" />;
+                                  }
+                                }
+                                
+                                // Зелёный: нормальный прогресс
+                                return <div className="w-4 h-4 rounded-full bg-green-500 mx-auto" title="Прогресс в норме" />;
+                              })()}
                             </td>
                             <td className="px-4 py-2 text-right">
                               <a href={t.evaUrl} target="_blank" rel="noreferrer">

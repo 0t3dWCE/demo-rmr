@@ -17,7 +17,7 @@ const roleLabels: Record<UserRole, string> = {
 const navigationConfig: Record<UserRole, Array<{ label: string; href: string; icon: any }>> = {
   director: [
     { label: 'Проекты', href: '/', icon: Building2 },
-    { label: 'Утверждение', href: '/director', icon: Settings },
+    { label: 'Согласование', href: '/approvals', icon: FileText },
     { label: 'ТехКом', href: '/techcom', icon: Users },
     { label: 'Настройки', href: '/settings', icon: Settings }
   ],
@@ -43,7 +43,7 @@ const navigationConfig: Record<UserRole, Array<{ label: string; href: string; ic
     { label: 'ТехКом', href: '/techcom', icon: Users }
   ],
   approver: [
-    { label: 'Проекты на согласование', href: '/approvals', icon: FileText }
+    { label: 'Проекты', href: '/approvals', icon: FileText }
   ]
 };
 

@@ -55,6 +55,8 @@ export interface ProjectItem {
   flowStatus: FlowStatus; // бизнес-флоу
   comments: ProjectComment[];
   createdBy?: Pick<User, 'role' | 'email' | 'name'>;
+  autoStartOnApproval: boolean; // Автоматически стартовать при согласовании
+  projectManager?: string; // Руководитель проекта (имя или email)
 }
 
 interface CreateProjectInput {
@@ -87,7 +89,12 @@ interface ProjectStore {
   architectAggregateAndSendToDirector: (projectId: string) => void;
   directorApprove: (projectId: string) => void;
   directorReject: (projectId: string) => void;
+  approverApprove: (projectId: string) => void;
+  approverReject: (projectId: string) => void;
   addComment: (projectId: string, c: Omit<ProjectComment, 'id' | 'date'>) => void;
+  toggleAutoStart: (projectId: string) => void;
+  startProject: (projectId: string) => void;
+  setProjectManager: (projectId: string, manager: string) => void;
 }
 
 const ProjectStoreContext = createContext<ProjectStore | undefined>(undefined);
@@ -108,6 +115,7 @@ const initialProjects: ProjectItem[] = [
     archStatus: null,
     teams: ['1C','LKK','BIM'],
     flowStatus: 'approved',
+    autoStartOnApproval: true,
     comments: [
       { id: 'c1', authorRole: 'rp', author: 'Руководитель БП', text: 'Стартуем интеграцию, важно успеть к релизу Q4.', date: '2025-09-01' }
     ],
@@ -129,8 +137,31 @@ const initialProjects: ProjectItem[] = [
     archStatus: 'Новая',
     teams: [],
     flowStatus: 'draft-created',
+    autoStartOnApproval: false,
     comments: [],
     tasks: []
+  },
+  {
+    id: 'PRJ-003',
+    name: 'Модернизация CRM системы',
+    status: 'on-approval',
+    startDate: '2025-11-01',
+    endDate: '2025-12-20',
+    priority: 1,
+    department: 'IT',
+    systems: ['CRM', 'Analytics'],
+    requiresArch: true,
+    archStatus: 'Принято',
+    teams: ['CRM', 'Analytics'],
+    flowStatus: 'waiting-director-approve',
+    autoStartOnApproval: false,
+    comments: [
+      { id: 'c2', authorRole: 'rp', author: 'Руководитель БП', text: 'Проект готов к согласованию. Архитектор провел оценку и выделил команды.', date: '2025-10-15' }
+    ],
+    tasks: [
+      { id: 'TASK-301', team: 'CRM', name: 'Обновление интерфейса', priority: 1, size: 'L', status: 'done', arch: 'Принято', dueDate: '2025-11-30', evaUrl: '#' },
+      { id: 'TASK-302', team: 'Analytics', name: 'Интеграция аналитики', priority: 2, size: 'M', status: 'done', arch: 'Принято', dueDate: '2025-12-10', evaUrl: '#' },
+    ]
   }
 ];
 
@@ -153,6 +184,7 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
       archStatus: null,
       teams: [],
       flowStatus: 'draft-created',
+      autoStartOnApproval: false,
       tasks: [],
       comments: input.comment ? [
         { id: `pc-${Date.now()}`, authorRole: 'prp', author: 'Помощник РП', text: input.comment, date: new Date().toISOString().slice(0,10) }
@@ -242,11 +274,51 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
     }));
   };
   const architectAggregateAndSendToDirector = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'waiting-director-approve' } : p));
-  const directorApprove = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'approved', status: 'in-progress' } : p));
+  
+  const directorApprove = (projectId: string) => setProjects(prev => prev.map(p => {
+    if (p.id !== projectId) return p;
+    // Если автостарт включен, сразу запускаем проект, иначе переводим в статус "approved" (ожидает старт)
+    return p.autoStartOnApproval 
+      ? { ...p, flowStatus: 'approved', status: 'in-progress' }
+      : { ...p, flowStatus: 'approved', status: 'evaluation' }; // Используем evaluation как "согласован, ожидает старт"
+  }));
+  
   const directorReject = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'rejected', status: 'rejected' } : p));
+  
+  const approverApprove = (projectId: string) => setProjects(prev => prev.map(p => {
+    if (p.id !== projectId) return p;
+    // Если автостарт включен, сразу запускаем проект, иначе переводим в статус "approved" (ожидает старт)
+    return p.autoStartOnApproval 
+      ? { ...p, flowStatus: 'approved', status: 'in-progress' }
+      : { ...p, flowStatus: 'approved', status: 'evaluation' }; // Используем evaluation как "согласован, ожидает старт"
+  }));
+  
+  const approverReject = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, flowStatus: 'rejected', status: 'rejected' } : p));
+
+  const toggleAutoStart = (projectId: string) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, autoStartOnApproval: !p.autoStartOnApproval } : p));
+
+  const startProject = (projectId: string) => {
+    // Создание контрольной точки в Eva и старт проекта
+    setProjects(prev => prev.map(p => {
+      if (p.id !== projectId) return p;
+      // Добавляем комментарий о создании контрольной точки
+      const newComment: ProjectComment = {
+        id: `pc-${Date.now()}`,
+        authorRole: 'rp',
+        author: 'Система',
+        text: `Проект запущен. Контрольная точка создана в Eva: ${p.endDate}`,
+        date: new Date().toISOString().slice(0,10)
+      };
+      return { ...p, status: 'in-progress', comments: [...(p.comments || []), newComment] };
+    }));
+  };
 
   const addComment = (projectId: string, c: Omit<ProjectComment, 'id' | 'date'>) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, comments: [...(p.comments || []), { ...c, id: `pc-${Date.now()}`, date: new Date().toISOString().slice(0,10) }] } : p));
+  };
+
+  const setProjectManager = (projectId: string, manager: string) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, projectManager: manager } : p));
   };
 
   const value: ProjectStore = useMemo(() => ({
@@ -266,7 +338,12 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
     architectAggregateAndSendToDirector,
     directorApprove,
     directorReject,
-    addComment
+    approverApprove,
+    approverReject,
+    addComment,
+    toggleAutoStart,
+    startProject,
+    setProjectManager
   }), [projects]);
 
   return (

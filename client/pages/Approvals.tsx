@@ -31,8 +31,8 @@ export default function Approvals() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Проекты на согласование</h1>
-            <p className="text-gray-600 mt-1">Список проектов в статусе «Согласование»</p>
+            <h1 className="text-3xl font-bold text-gray-900">Проекты</h1>
+            <p className="text-gray-600 mt-1">Список проектов, требующих согласования</p>
           </div>
         </div>
 
@@ -62,7 +62,7 @@ export default function Approvals() {
               <SelectValue placeholder="Статус" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="on-approval">Согласование</SelectItem>
+              <SelectItem value="on-approval">Требует согласования</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -89,7 +89,7 @@ export default function Approvals() {
                       ))}
                     </div>
                     <div className="col-span-2">
-                      <Badge variant="outline">Согласование</Badge>
+                      <Badge variant="outline">Требует согласования</Badge>
                     </div>
                     <div className="col-span-3 text-sm text-gray-700">{p.endDate}</div>
                   </div>
