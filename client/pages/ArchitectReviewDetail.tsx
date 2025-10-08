@@ -119,9 +119,7 @@ export default function ArchitectReviewDetail() {
             </div>
 
             <div className="flex items-center gap-3 pt-2">
-              <Button variant="outline" onClick={()=> architectStartDecompose(project.id)}>Начать декомпозицию</Button>
-              <Button onClick={handleAccept}>Запросить оценки у команд</Button>
-              <Button variant="outline" onClick={()=> architectAggregateAndSendToDirector(project.id)}>Собрать и отправить директору</Button>
+              <Button onClick={()=> architectAggregateAndSendToDirector(project.id)}>Закончить архитектурный анализ</Button>
               <Button variant="ghost" onClick={handleDecline}>Отклонить</Button>
             </div>
 
