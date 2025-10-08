@@ -38,6 +38,16 @@ export interface ProjectComment {
   date: string;
 }
 
+export interface TechComItem {
+  id: string; // TECH-xxx
+  title: string;
+  date: string;
+  type: 'онлайн' | 'офлайн';
+  related: string; // PRJ-xxx или название команды + название проекта
+  participants: string; // участники через запятую
+  resolution?: string;
+}
+
 export interface ProjectItem {
   id: string; // PRJ-xxx
   name: string;
@@ -73,6 +83,7 @@ interface CreateProjectInput {
 
 interface ProjectStore {
   projects: ProjectItem[];
+  techComs: TechComItem[];
   createProject: (input: CreateProjectInput) => ProjectItem;
   updateProject: (projectId: string, fields: Partial<Pick<ProjectItem, 'name' | 'startDate' | 'endDate'>>) => void;
   setArchStatus: (projectId: string, status: Exclude<ArchStatus, null>, reason?: string) => void;
@@ -95,11 +106,19 @@ interface ProjectStore {
   toggleAutoStart: (projectId: string) => void;
   startProject: (projectId: string) => void;
   setProjectManager: (projectId: string, manager: string) => void;
+  // ТехКомы
+  createTechCom: (input: { title: string; date: string; type: 'онлайн' | 'офлайн'; related: string; participants: string }) => TechComItem;
 }
 
 const ProjectStoreContext = createContext<ProjectStore | undefined>(undefined);
 
 let counter = 5; // начальные демо
+let techComCounter = 2; // начальные демо техкомы
+
+const initialTechComs: TechComItem[] = [
+  { id: 'TECH-001', title: 'Приоритизация Q4', date: '2025-11-15 14:00', type: 'онлайн', related: 'PRJ-001', participants: '6 участников', resolution: 'PRJ-001 (2 → 3)' },
+  { id: 'TECH-002', title: 'Очередность задач IC', date: '2025-11-20 10:00', type: 'офлайн', related: 'PRJ-002', participants: '4 участника' },
+];
 
 const initialProjects: ProjectItem[] = [
   {
@@ -167,6 +186,7 @@ const initialProjects: ProjectItem[] = [
 
 export function ProjectStoreProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<ProjectItem[]>(initialProjects);
+  const [techComs, setTechComs] = useState<TechComItem[]>(initialTechComs);
 
   const createProject = (input: CreateProjectInput): ProjectItem => {
     counter += 1;
@@ -321,8 +341,24 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, projectManager: manager } : p));
   };
 
+  const createTechCom = (input: { title: string; date: string; type: 'онлайн' | 'офлайн'; related: string; participants: string }): TechComItem => {
+    techComCounter += 1;
+    const id = `TECH-${String(techComCounter).padStart(3, '0')}`;
+    const techCom: TechComItem = {
+      id,
+      title: input.title,
+      date: input.date,
+      type: input.type,
+      related: input.related,
+      participants: input.participants
+    };
+    setTechComs(prev => [techCom, ...prev]);
+    return techCom;
+  };
+
   const value: ProjectStore = useMemo(() => ({
     projects,
+    techComs,
     createProject,
     updateProject,
     setArchStatus,
@@ -343,8 +379,9 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
     addComment,
     toggleAutoStart,
     startProject,
-    setProjectManager
-  }), [projects]);
+    setProjectManager,
+    createTechCom
+  }), [projects, techComs]);
 
   return (
     <ProjectStoreContext.Provider value={value}>

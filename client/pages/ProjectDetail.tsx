@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CalendarDays, ExternalLink, AlertTriangle, Users, Play } from 'lucide-react';
 import { useProjectStore } from '../contexts/ProjectStoreContext';
 import { Textarea } from '@/components/ui/textarea';
@@ -65,7 +66,8 @@ const statusBadges: Record<ProjectStatus, { label: string; color: string }> = {
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const { findProject, addComment, submitToRp, rpSendToArchitect, rpMarkApproval, directorApprove, directorReject, approverApprove, approverReject, updateProject, toggleAutoStart, startProject, setProjectManager } = useProjectStore();
+  const navigate = useNavigate();
+  const { findProject, addComment, submitToRp, rpSendToArchitect, rpMarkApproval, directorApprove, directorReject, approverApprove, approverReject, updateProject, toggleAutoStart, startProject, setProjectManager, createTechCom } = useProjectStore();
   const { currentUser } = useRole();
   const storeProject = findProject(id!);
 
@@ -80,6 +82,14 @@ export default function ProjectDetail() {
   const [editEnd, setEditEnd] = useState(storeProject?.endDate || '');
   const [isEditingName, setIsEditingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Модальное окно создания ТехКома
+  const [techComDialogOpen, setTechComDialogOpen] = useState(false);
+  const [techComTeam, setTechComTeam] = useState('');
+  const [techComTitle, setTechComTitle] = useState('');
+  const [techComType, setTechComType] = useState<'онлайн' | 'офлайн'>('онлайн');
+  const [techComDate, setTechComDate] = useState('');
+  const [techComParticipants, setTechComParticipants] = useState('');
 
   useEffect(() => {
     setEditName(storeProject?.name || '');
@@ -140,6 +150,33 @@ export default function ProjectDetail() {
     }
     return groups;
   }, [filtered]);
+
+  const handleCreateTechCom = (teamName: string) => {
+    setTechComTeam(teamName);
+    setTechComTitle('');
+    setTechComType('онлайн');
+    setTechComDate('');
+    setTechComParticipants('');
+    setTechComDialogOpen(true);
+  };
+
+  const handleTechComSubmit = () => {
+    if (!storeProject || !techComTitle.trim() || !techComDate) return;
+    
+    const relatedText = `${techComTeam} - ${storeProject.name}`;
+    
+    createTechCom({
+      title: techComTitle.trim(),
+      date: techComDate,
+      type: techComType,
+      related: relatedText,
+      participants: techComParticipants.trim() || 'Не указаны'
+    });
+    
+    setTechComDialogOpen(false);
+    // Перенаправление на страницу ТехКомов
+    navigate('/techcom');
+  };
 
   return (
     <Layout>
@@ -409,7 +446,19 @@ export default function ProjectDetail() {
             <div className="space-y-6">
               {Object.entries(groupedByTeam).map(([team, items]) => (
                 <div key={team} className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-4 py-2 bg-gray-50 text-sm font-medium text-gray-800">Команда {team}</div>
+                  <div className="px-4 py-2 bg-gray-50 flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-800">Команда {team}</span>
+                    {currentUser.role === 'rkp' && (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => handleCreateTechCom(team)}
+                        className="text-xs"
+                      >
+                        Создать ТехКом
+                      </Button>
+                    )}
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-white border-b">
@@ -533,6 +582,53 @@ export default function ProjectDetail() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Модальное окно создания ТехКома */}
+        <Dialog open={techComDialogOpen} onOpenChange={setTechComDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Создание ТехКом</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <Input 
+                placeholder="Тема ТехКом" 
+                value={techComTitle}
+                onChange={(e) => setTechComTitle(e.target.value)}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <Select value={techComType} onValueChange={(val) => setTechComType(val as 'онлайн' | 'офлайн')}>
+                  <SelectTrigger><SelectValue placeholder="Тип" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="онлайн">Онлайн</SelectItem>
+                    <SelectItem value="офлайн">Офлайн</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input 
+                  type="datetime-local" 
+                  value={techComDate}
+                  onChange={(e) => setTechComDate(e.target.value)}
+                />
+              </div>
+              <Input 
+                placeholder={`Проект/задача (${techComTeam} - ${storeProject?.name || ''})`}
+                value={`${techComTeam} - ${storeProject?.name || ''}`}
+                disabled
+                className="bg-gray-50"
+              />
+              <Input 
+                placeholder="Участники (через запятую)" 
+                value={techComParticipants}
+                onChange={(e) => setTechComParticipants(e.target.value)}
+              />
+              <Button 
+                onClick={handleTechComSubmit}
+                disabled={!techComTitle.trim() || !techComDate}
+              >
+                Создать
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

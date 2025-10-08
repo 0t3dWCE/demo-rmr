@@ -6,33 +6,48 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Link } from 'react-router-dom';
-
-interface TechComItem {
-  id: string;
-  title: string;
-  date: string;
-  type: 'онлайн' | 'офлайн';
-  related: string; // PRJ-xxx
-  participants: number;
-  resolution?: string;
-}
-
-const mock: TechComItem[] = [
-  { id: 'TECH-001', title: 'Приоритизация Q4', date: '2025-11-15 14:00', type: 'онлайн', related: 'PRJ-001', participants: 6, resolution: 'PRJ-001 (2 → 3)' },
-  { id: 'TECH-002', title: 'Очередность задач IC', date: '2025-11-20 10:00', type: 'офлайн', related: 'PRJ-002', participants: 4 },
-];
+import { Link, useNavigate } from 'react-router-dom';
+import { useProjectStore } from '../contexts/ProjectStoreContext';
 
 export default function TechCom() {
   const [q, setQ] = useState('');
   const [type, setType] = useState<'all' | 'онлайн' | 'офлайн'>('all');
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const { techComs, createTechCom } = useProjectStore();
+  
+  // Состояние для формы создания ТехКома
+  const [newTitle, setNewTitle] = useState('');
+  const [newType, setNewType] = useState<'онлайн' | 'офлайн'>('онлайн');
+  const [newDate, setNewDate] = useState('');
+  const [newRelated, setNewRelated] = useState('');
+  const [newParticipants, setNewParticipants] = useState('');
 
-  const filtered = mock.filter(item => {
+  const filtered = techComs.filter(item => {
     const matchesQ = item.title.toLowerCase().includes(q.toLowerCase()) || item.related.toLowerCase().includes(q.toLowerCase());
     const matchesType = type === 'all' || item.type === type;
     return matchesQ && matchesType;
   });
+
+  const handleCreate = () => {
+    if (!newTitle.trim() || !newDate || !newRelated.trim()) return;
+    
+    createTechCom({
+      title: newTitle.trim(),
+      date: newDate,
+      type: newType,
+      related: newRelated.trim(),
+      participants: newParticipants.trim() || 'Не указаны'
+    });
+    
+    // Сброс формы
+    setNewTitle('');
+    setNewType('онлайн');
+    setNewDate('');
+    setNewRelated('');
+    setNewParticipants('');
+    setOpen(false);
+  };
 
   return (
     <Layout>
@@ -59,20 +74,41 @@ export default function TechCom() {
                 <DialogTitle>Создание ТехКом</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 text-sm">
-                <Input placeholder="Тема ТехКом" />
+                <Input 
+                  placeholder="Тема ТехКом" 
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                />
                 <div className="grid grid-cols-2 gap-3">
-                  <Select defaultValue="онлайн">
+                  <Select value={newType} onValueChange={(val) => setNewType(val as 'онлайн' | 'офлайн')}>
                     <SelectTrigger><SelectValue placeholder="Тип" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="онлайн">Онлайн</SelectItem>
                       <SelectItem value="офлайн">Офлайн</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input type="datetime-local" />
+                  <Input 
+                    type="datetime-local" 
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                  />
                 </div>
-                <Input placeholder="Проект/задача (PRJ-..., EVA-...)" />
-                <Input placeholder="Участники (через запятую)" />
-                <Button onClick={() => setOpen(false)}>Создать</Button>
+                <Input 
+                  placeholder="Проект/задача (PRJ-..., EVA-...)" 
+                  value={newRelated}
+                  onChange={(e) => setNewRelated(e.target.value)}
+                />
+                <Input 
+                  placeholder="Участники (через запятую)" 
+                  value={newParticipants}
+                  onChange={(e) => setNewParticipants(e.target.value)}
+                />
+                <Button 
+                  onClick={handleCreate}
+                  disabled={!newTitle.trim() || !newDate || !newRelated.trim()}
+                >
+                  Создать
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -87,7 +123,7 @@ export default function TechCom() {
             <div className="col-span-2">Резолюция</div>
           </div>
           {filtered.map(i => (
-            <Link to={`/techcom/${i.id}`}>
+            <Link key={i.id} to={`/techcom/${i.id}`}>
               <Card className="rounded-none shadow-none border-0 border-b last:border-b-0 hover:bg-gray-50">
                 <div className="grid grid-cols-12 gap-0 px-4 py-3 items-center">
                   <div className="col-span-4 text-sm font-medium text-gray-900">{i.title}</div>
