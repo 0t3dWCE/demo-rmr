@@ -38,6 +38,8 @@ export interface ProjectComment {
   date: string;
 }
 
+export type TechComStatus = 'Запланирован' | 'Завершен' | 'Отклонен';
+
 export interface TechComItem {
   id: string; // TECH-xxx
   title: string;
@@ -46,6 +48,8 @@ export interface TechComItem {
   related: string; // PRJ-xxx или название команды + название проекта
   participants: string; // участники через запятую
   resolution?: string;
+  status: TechComStatus;
+  evaChanges?: Array<{ ticket: string; oldPriority: number; newPriority: number }>;
 }
 
 export interface ProjectItem {
@@ -108,6 +112,8 @@ interface ProjectStore {
   setProjectManager: (projectId: string, manager: string) => void;
   // ТехКомы
   createTechCom: (input: { title: string; date: string; type: 'онлайн' | 'офлайн'; related: string; participants: string }) => TechComItem;
+  completeTechCom: (techComId: string) => void;
+  rejectTechCom: (techComId: string) => void;
 }
 
 const ProjectStoreContext = createContext<ProjectStore | undefined>(undefined);
@@ -116,8 +122,29 @@ let counter = 5; // начальные демо
 let techComCounter = 2; // начальные демо техкомы
 
 const initialTechComs: TechComItem[] = [
-  { id: 'TECH-001', title: 'Приоритизация Q4', date: '2025-11-15 14:00', type: 'онлайн', related: 'PRJ-001', participants: '6 участников', resolution: 'PRJ-001 (2 → 3)' },
-  { id: 'TECH-002', title: 'Очередность задач IC', date: '2025-11-20 10:00', type: 'офлайн', related: 'PRJ-002', participants: '4 участника' },
+  { 
+    id: 'TECH-001', 
+    title: 'Приоритизация Q4', 
+    date: '2025-11-15 14:00', 
+    type: 'онлайн', 
+    related: 'PRJ-001', 
+    participants: '6 участников', 
+    resolution: 'PRJ-001 (2 → 3)',
+    status: 'Завершен',
+    evaChanges: [
+      { ticket: 'EVA-1234', oldPriority: 2, newPriority: 3 },
+      { ticket: 'EVA-5678', oldPriority: 3, newPriority: 2 }
+    ]
+  },
+  { 
+    id: 'TECH-002', 
+    title: 'Очередность задач IC', 
+    date: '2025-11-20 10:00', 
+    type: 'офлайн', 
+    related: 'PRJ-002', 
+    participants: '4 участника',
+    status: 'Запланирован'
+  },
 ];
 
 const initialProjects: ProjectItem[] = [
@@ -350,10 +377,23 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
       date: input.date,
       type: input.type,
       related: input.related,
-      participants: input.participants
+      participants: input.participants,
+      status: 'Запланирован'
     };
     setTechComs(prev => [techCom, ...prev]);
     return techCom;
+  };
+
+  const completeTechCom = (techComId: string) => {
+    setTechComs(prev => prev.map(tc => 
+      tc.id === techComId ? { ...tc, status: 'Завершен' as TechComStatus } : tc
+    ));
+  };
+
+  const rejectTechCom = (techComId: string) => {
+    setTechComs(prev => prev.map(tc => 
+      tc.id === techComId ? { ...tc, status: 'Отклонен' as TechComStatus } : tc
+    ));
   };
 
   const value: ProjectStore = useMemo(() => ({
@@ -380,7 +420,9 @@ export function ProjectStoreProvider({ children }: { children: ReactNode }) {
     toggleAutoStart,
     startProject,
     setProjectManager,
-    createTechCom
+    createTechCom,
+    completeTechCom,
+    rejectTechCom
   }), [projects, techComs]);
 
   return (

@@ -116,25 +116,40 @@ export default function TechCom() {
 
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="grid grid-cols-12 gap-0 px-4 py-2 text-xs text-gray-500 border-b">
-            <div className="col-span-4">Тема</div>
+            <div className="col-span-3">Тема</div>
             <div className="col-span-2">Дата</div>
-            <div className="col-span-2">Тип</div>
+            <div className="col-span-1">Тип</div>
+            <div className="col-span-2">Статус</div>
             <div className="col-span-2">Проект</div>
             <div className="col-span-2">Резолюция</div>
           </div>
-          {filtered.map(i => (
-            <Link key={i.id} to={`/techcom/${i.id}`}>
-              <Card className="rounded-none shadow-none border-0 border-b last:border-b-0 hover:bg-gray-50">
-                <div className="grid grid-cols-12 gap-0 px-4 py-3 items-center">
-                  <div className="col-span-4 text-sm font-medium text-gray-900">{i.title}</div>
-                  <div className="col-span-2 text-sm">{i.date}</div>
-                  <div className="col-span-2"><Badge variant="outline">{i.type}</Badge></div>
-                  <div className="col-span-2 text-sm">{i.related}</div>
-                  <div className="col-span-2 text-sm text-gray-700">{i.resolution || '-'}</div>
-                </div>
-              </Card>
-            </Link>
-          ))}
+          {filtered.map(i => {
+            // Форматирование резолюции из evaChanges
+            const resolutionText = i.evaChanges && i.evaChanges.length > 0
+              ? i.evaChanges.map(ch => `${ch.ticket} (${ch.oldPriority}→${ch.newPriority})`).join(', ')
+              : (i.resolution || '-');
+            
+            // Цветовое кодирование статуса
+            const statusVariant = 
+              i.status === 'Завершен' ? 'default' : 
+              i.status === 'Отклонен' ? 'destructive' : 
+              'outline';
+            
+            return (
+              <Link key={i.id} to={`/techcom/${i.id}`}>
+                <Card className="rounded-none shadow-none border-0 border-b last:border-b-0 hover:bg-gray-50">
+                  <div className="grid grid-cols-12 gap-0 px-4 py-3 items-center">
+                    <div className="col-span-3 text-sm font-medium text-gray-900">{i.title}</div>
+                    <div className="col-span-2 text-sm">{i.date}</div>
+                    <div className="col-span-1"><Badge variant="outline">{i.type}</Badge></div>
+                    <div className="col-span-2"><Badge variant={statusVariant}>{i.status}</Badge></div>
+                    <div className="col-span-2 text-sm">{i.related}</div>
+                    <div className="col-span-2 text-sm text-gray-700">{resolutionText}</div>
+                  </div>
+                </Card>
+              </Link>
+            );
+          })}
           {filtered.length === 0 && (
             <div className="p-8 text-center text-gray-500">Нет записей</div>
           )}
